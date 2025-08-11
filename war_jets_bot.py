@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import sqlite3
 from config import token
+
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -91,5 +92,51 @@ async def best(ctx):
     embed.add_field(name="Best K/D ratio", value=best_kd, inline=False)
 
     await ctx.send(embed=embed)
+
+@bot.command()
+async def fav(ctx):
+    await ctx.send("Mine is F14, what's your fav?")
+
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel
+
+    try:
+        msg = await bot.wait_for('message', check=check, timeout=30.0)
+        fav_jet = msg.content.strip()
+
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT jet_id, jet_name FROM jets WHERE jet_name LIKE ?", (f"%{fav_jet}%",))
+        result = cursor.fetchone()
+
+        if not result:
+            await ctx.send(f"{fav_jet} could not be found.")
+            conn.close()
+            return
+
+        jet_id, jet_name = result
+
+        cursor.execute("SELECT kd_ratio FROM stats WHERE jet_id = ?", (jet_id,))
+        kd = cursor.fetchone()[0]
+
+        cursor.execute("SELECT max_speed, turn_ratio, max_takeoff_weight FROM abilities WHERE jet_id = ?", (jet_id,))
+        speed, turn, weight = cursor.fetchone()
+
+        conn.close()
+
+        embed = discord.Embed(
+            title=f"{jet_name} information:",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="K/D ratio", value=kd, inline=False)
+        embed.add_field(name="Max speed", value=f"{speed} km/h", inline=False)
+        embed.add_field(name="Turn rate", value=str(turn), inline=False)
+        embed.add_field(name="Max T/O weight", value=weight, inline=False)
+
+        await ctx.send(embed=embed)
+
+    except TimeoutError:
+        await ctx.send("Took too long.")
 
 bot.run(token)
